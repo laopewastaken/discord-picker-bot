@@ -84,37 +84,27 @@ async def send_message_with_files(message, target_channel):
         await target_channel.send(content=content or "(No content)")
 
 
-# 🔥 CORE FIX: build proper fair deck
-async def build_deck(source_channel):
-    threads = await get_all_threads(source_channel)
-
-    if not threads:
-        return []
-
+# 🔥 FIXED: proper probability picker (NO FAKE DECK)
+def pick_thread(threads):
     special = [t for t in threads if t.id in SPECIAL_THREAD_IDS]
     normal = [t for t in threads if t.id not in SPECIAL_THREAD_IDS]
 
-    deck = []
+    roll = random.random()
 
-    # 10% weighting applied ONCE per deck build
-    for t in threads:
-        if t.id in SPECIAL_THREAD_IDS:
-            if random.random() < 0.10:
-                deck.append(t)
-        else:
-            deck.append(t)
-
-    if not deck:
-        deck = threads
-
-    random.shuffle(deck)
-    return deck
+    if roll < 0.10 and special:
+        return random.choice(special), True
+    else:
+        return random.choice(normal if normal else threads), False
 
 
 @bot.command()
 async def roll(ctx, amount: int):
     if amount <= 0:
         await ctx.send("Give me a number above 0.")
+        return
+
+    if amount > 100:
+        await ctx.send("Max 100 rolls.")
         return
 
     source_channel = bot.get_channel(SOURCE_CHANNEL_ID)
@@ -124,31 +114,43 @@ async def roll(ctx, amount: int):
         await ctx.send("Channel not found.")
         return
 
-    deck = await build_deck(source_channel)
+    threads = await get_all_threads(source_channel)
 
-    if not deck:
+    if not threads:
         await ctx.send("No threads found.")
         return
 
-    amount = min(amount, len(deck))
-
     global special_count, normal_count
 
-    for i in range(amount):
-        chosen = deck.pop()  # NO REPEATS EVER IN THIS ROLL
+    used = set()
+    sent = 0
+    attempts = 0
+    max_attempts = amount * 10  # safety buffer
+
+    while sent < amount and attempts < max_attempts:
+        attempts += 1
+
+        chosen, is_special = pick_thread(threads)
+
+        # 🚫 no repeats per roll
+        if chosen.id in used:
+            continue
 
         msg = await get_thread_starter_message(chosen)
 
         if not msg:
-            await target_channel.send("(Empty thread)")
-            continue
+            continue  # do NOT consume slot
+
+        used.add(chosen.id)
 
         await send_message_with_files(msg, target_channel)
 
-        if chosen.id in SPECIAL_THREAD_IDS:
+        if is_special:
             special_count += 1
         else:
             normal_count += 1
+
+        sent += 1
 
 
 @bot.command()
