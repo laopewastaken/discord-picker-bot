@@ -13,7 +13,7 @@ intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 SOURCE_CHANNEL_ID = 1497296815559544862
-TARGET_CHANNEL_ID = 1498464307195936858
+TARGET_CHANNEL_ID = 1499835814832504893
 
 SPECIAL_THREAD_IDS = {
     1498027467280089261,
@@ -24,12 +24,9 @@ SPECIAL_THREAD_IDS = {
     1498086692341682256
 }
 
-# 🧠 LIVE STATS
+# 🧠 LIVE STATS (session only)
 special_count = 0
 normal_count = 0
-
-# 🧠 anti-immediate-repeat memory
-last_thread_id = None
 
 
 @bot.event
@@ -88,8 +85,8 @@ async def send_message_with_files(message, target_channel):
         await target_channel.send(content=content or "(No content)")
 
 
-async def pick_one(source_channel, target_channel):
-    global special_count, normal_count, last_thread_id
+async def pick_one(source_channel, target_channel, used):
+    global special_count, normal_count
 
     threads = await get_all_threads(source_channel)
 
@@ -97,25 +94,24 @@ async def pick_one(source_channel, target_channel):
         await target_channel.send("No threads found.")
         return
 
-    special = [t for t in threads if t.id in SPECIAL_THREAD_IDS]
-    normal = [t for t in threads if t.id not in SPECIAL_THREAD_IDS]
+    # 🚫 remove already used threads (NO REPEATS PER ROLL)
+    available = [t for t in threads if t.id not in used]
+
+    if not available:
+        return
+
+    special = [t for t in available if t.id in SPECIAL_THREAD_IDS]
+    normal = [t for t in available if t.id not in SPECIAL_THREAD_IDS]
 
     roll = random.random()
 
-    # 🎯 10% special chance (change back if needed)
-    pool = special if (roll < 0.10 and special) else (normal if normal else threads)
+    pool = special if (roll < 0.10 and special) else (normal if normal else available)
 
-    # 🔀 shuffle pool (Option 3)
     random.shuffle(pool)
 
-    # 🚫 avoid immediate repeat (Option 1)
-    filtered_pool = [t for t in pool if t.id != last_thread_id]
+    chosen = random.choice(pool)
 
-    if not filtered_pool:
-        filtered_pool = pool
-
-    chosen = random.choice(filtered_pool)
-    last_thread_id = chosen.id
+    used.add(chosen.id)
 
     msg = await get_thread_starter_message(chosen)
 
@@ -138,10 +134,6 @@ async def roll(ctx, amount: int):
         await ctx.send("Give me a number above 0.")
         return
 
-    if amount > 50:
-        await ctx.send("Calm down. Max 50 rolls.")
-        return
-
     source_channel = bot.get_channel(SOURCE_CHANNEL_ID)
     target_channel = bot.get_channel(TARGET_CHANNEL_ID)
 
@@ -149,8 +141,15 @@ async def roll(ctx, amount: int):
         await ctx.send("Channel not found.")
         return
 
+    threads = await get_all_threads(source_channel)
+
+    # safety: cannot pick more unique items than exist
+    amount = min(amount, len(threads))
+
+    used = set()  # 🔥 KEY FIX: per-roll memory
+
     for _ in range(amount):
-        await pick_one(source_channel, target_channel)
+        await pick_one(source_channel, target_channel, used)
 
 
 # 📊 STATS
