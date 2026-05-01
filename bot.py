@@ -1,21 +1,28 @@
 import discord
 import random
 from discord.ext import commands
-
 import os
+
 TOKEN = os.getenv("TOKEN")
 
 intents = discord.Intents.default()
 intents.guilds = True
 intents.messages = True
-intents.message_content = True  # REQUIRED
+intents.message_content = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 SOURCE_CHANNEL_ID = 1497296815559544862
 TARGET_CHANNEL_ID = 1498464307195936858
 
-SPECIAL_THREAD_IDS = {1498027467280089261, 1498070775452925952, 1498076218069614625, 1498077077306605658, 1498084047690399895, 1498086692341682256}
+SPECIAL_THREAD_IDS = {
+    1498027467280089261,
+    1498070775452925952,
+    1498076218069614625,
+    1498077077306605658,
+    1498084047690399895,
+    1498086692341682256
+}
 
 
 @bot.event
@@ -25,11 +32,8 @@ async def on_ready():
 
 async def get_all_threads(channel):
     threads = []
-
-    # active threads
     threads.extend(channel.threads)
 
-    # archived threads
     async for t in channel.archived_threads(limit=None):
         threads.append(t)
 
@@ -45,38 +49,51 @@ async def get_thread_starter_message(thread):
     return None
 
 
-def extract_content(message):
-    # 1. plain text
+def extract_text(message):
+    parts = []
+
     if message.content:
-        return message.content.strip()
+        parts.append(message.content)
 
-    # 2. embeds
     if message.embeds:
-        embed = message.embeds[0]
-        if embed.title and embed.description:
-            return f"{embed.title}\n{embed.description}"
-        elif embed.title:
-            return embed.title
-        elif embed.description:
-            return embed.description
+        e = message.embeds[0]
+        if e.title:
+            parts.append(e.title)
+        if e.description:
+            parts.append(e.description)
 
-    # 3. attachments
-    if message.attachments:
-        return message.attachments[0].url
-
-    return "(No usable content)"
+    return "\n".join(parts).strip()
 
 
-async def pick_one(source_channel):
+async def send_message_with_files(message, target_channel):
+    content = extract_text(message)
+
+    files = []
+    for attachment in message.attachments:
+        try:
+            files.append(await attachment.to_file())
+        except:
+            pass
+
+    if files:
+        await target_channel.send(content=content or None, files=files)
+    else:
+        await target_channel.send(content=content or "(No content)")
+
+
+async def pick_one(source_channel, target_channel):
     threads = await get_all_threads(source_channel)
 
     if not threads:
-        return None
+        await target_channel.send("No threads found.")
+        return
 
     special = [t for t in threads if t.id in SPECIAL_THREAD_IDS]
     normal = [t for t in threads if t.id not in SPECIAL_THREAD_IDS]
 
-    if random.random() < 0.10 and special:
+    roll = random.random()
+
+    if roll < 0.10 and special:
         chosen = random.choice(special)
     else:
         chosen = random.choice(normal if normal else threads)
@@ -84,9 +101,10 @@ async def pick_one(source_channel):
     msg = await get_thread_starter_message(chosen)
 
     if not msg:
-        return "(Thread empty)"
+        await target_channel.send("(Empty thread)")
+        return
 
-    return extract_content(msg)
+    await send_message_with_files(msg, target_channel)
 
 
 @bot.command()
@@ -102,23 +120,12 @@ async def roll(ctx, amount: int):
     source_channel = bot.get_channel(SOURCE_CHANNEL_ID)
     target_channel = bot.get_channel(TARGET_CHANNEL_ID)
 
-    results = []
+    if not source_channel or not target_channel:
+        await ctx.send("Channel not found.")
+        return
 
-    for _ in range(amount):
-        result = await pick_one(source_channel)
-        if result:
-            results.append(f"🎯 {result}")
-
-    # Send in chunks (Discord has message length limits)
-    chunk = ""
-    for r in results:
-        if len(chunk) + len(r) > 1900:
-            await target_channel.send(chunk)
-            chunk = ""
-        chunk += r + "\n"
-
-    if chunk:
-        await target_channel.send(chunk)
+    for i in range(amount):
+        await pick_one(source_channel, target_channel)
 
 
 bot.run(TOKEN)
