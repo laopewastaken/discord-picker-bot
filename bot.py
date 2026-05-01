@@ -24,6 +24,10 @@ SPECIAL_THREAD_IDS = {
     1498086692341682256
 }
 
+# 🧠 LIVE STATS (session only)
+special_count = 0
+normal_count = 0
+
 
 @bot.event
 async def on_ready():
@@ -82,6 +86,8 @@ async def send_message_with_files(message, target_channel):
 
 
 async def pick_one(source_channel, target_channel):
+    global special_count, normal_count
+
     threads = await get_all_threads(source_channel)
 
     if not threads:
@@ -93,10 +99,15 @@ async def pick_one(source_channel, target_channel):
 
     roll = random.random()
 
-    if roll < 0.50 and special:
+    # 🎯 change back to 0.10 when done testing
+    if roll < 0.10 and special:
         chosen = random.choice(special)
+        special_count += 1
+        picked_type = "SPECIAL"
     else:
         chosen = random.choice(normal if normal else threads)
+        normal_count += 1
+        picked_type = "NORMAL"
 
     msg = await get_thread_starter_message(chosen)
 
@@ -124,8 +135,37 @@ async def roll(ctx, amount: int):
         await ctx.send("Channel not found.")
         return
 
-    for i in range(amount):
+    for _ in range(amount):
         await pick_one(source_channel, target_channel)
+
+
+# 📊 STATS COMMAND
+@bot.command()
+async def stats(ctx):
+    total = special_count + normal_count
+
+    if total == 0:
+        await ctx.send("No rolls yet.")
+        return
+
+    special_pct = (special_count / total) * 100
+    normal_pct = (normal_count / total) * 100
+
+    await ctx.send(
+        f"📊 **Roll Stats**\n"
+        f"Special: {special_count} ({special_pct:.1f}%)\n"
+        f"Normal: {normal_count} ({normal_pct:.1f}%)\n"
+        f"Total: {total}"
+    )
+
+
+# 🔄 RESET COMMAND
+@bot.command()
+async def resetstats(ctx):
+    global special_count, normal_count
+    special_count = 0
+    normal_count = 0
+    await ctx.send("📊 Stats reset.")
 
 
 bot.run(TOKEN)
