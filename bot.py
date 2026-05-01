@@ -13,7 +13,7 @@ intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 SOURCE_CHANNEL_ID = 1497296815559544862
-TARGET_CHANNEL_ID = 1498464307195936858
+TARGET_CHANNEL_ID = 1499835814832504893
 
 SPECIAL_THREAD_IDS = {
     1498027467280089261,
@@ -93,7 +93,7 @@ async def pick_one(source_channel, target_channel):
 
     roll = random.random()
 
-    if roll < 0.10 and special:
+    if roll < 0.50 and special:
         chosen = random.choice(special)
     else:
         chosen = random.choice(normal if normal else threads)
