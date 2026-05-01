@@ -24,9 +24,12 @@ SPECIAL_THREAD_IDS = {
     1498086692341682256
 }
 
-# 🧠 LIVE STATS (session only)
+# 🧠 LIVE STATS
 special_count = 0
 normal_count = 0
+
+# 🧠 anti-immediate-repeat memory
+last_thread_id = None
 
 
 @bot.event
@@ -86,7 +89,7 @@ async def send_message_with_files(message, target_channel):
 
 
 async def pick_one(source_channel, target_channel):
-    global special_count, normal_count
+    global special_count, normal_count, last_thread_id
 
     threads = await get_all_threads(source_channel)
 
@@ -99,15 +102,20 @@ async def pick_one(source_channel, target_channel):
 
     roll = random.random()
 
-    # 🎯 change back to 0.10 when done testing
-    if roll < 0.10 and special:
-        chosen = random.choice(special)
-        special_count += 1
-        picked_type = "SPECIAL"
-    else:
-        chosen = random.choice(normal if normal else threads)
-        normal_count += 1
-        picked_type = "NORMAL"
+    # 🎯 10% special chance (change back if needed)
+    pool = special if (roll < 0.10 and special) else (normal if normal else threads)
+
+    # 🔀 shuffle pool (Option 3)
+    random.shuffle(pool)
+
+    # 🚫 avoid immediate repeat (Option 1)
+    filtered_pool = [t for t in pool if t.id != last_thread_id]
+
+    if not filtered_pool:
+        filtered_pool = pool
+
+    chosen = random.choice(filtered_pool)
+    last_thread_id = chosen.id
 
     msg = await get_thread_starter_message(chosen)
 
@@ -116,6 +124,12 @@ async def pick_one(source_channel, target_channel):
         return
 
     await send_message_with_files(msg, target_channel)
+
+    # stats update
+    if chosen.id in SPECIAL_THREAD_IDS:
+        special_count += 1
+    else:
+        normal_count += 1
 
 
 @bot.command()
@@ -139,7 +153,7 @@ async def roll(ctx, amount: int):
         await pick_one(source_channel, target_channel)
 
 
-# 📊 STATS COMMAND
+# 📊 STATS
 @bot.command()
 async def stats(ctx):
     total = special_count + normal_count
@@ -148,18 +162,15 @@ async def stats(ctx):
         await ctx.send("No rolls yet.")
         return
 
-    special_pct = (special_count / total) * 100
-    normal_pct = (normal_count / total) * 100
-
     await ctx.send(
         f"📊 **Roll Stats**\n"
-        f"Special: {special_count} ({special_pct:.1f}%)\n"
-        f"Normal: {normal_count} ({normal_pct:.1f}%)\n"
+        f"Special: {special_count} ({(special_count/total)*100:.1f}%)\n"
+        f"Normal: {normal_count} ({(normal_count/total)*100:.1f}%)\n"
         f"Total: {total}"
     )
 
 
-# 🔄 RESET COMMAND
+# 🔄 RESET
 @bot.command()
 async def resetstats(ctx):
     global special_count, normal_count
