@@ -15,6 +15,18 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 SOURCE_CHANNEL_ID = 1497296815559544862
 TARGET_CHANNEL_ID = 1499835814832504893
 
+# 🔵 COMMON (your 6 normal threads)
+COMMON_THREAD_IDS = {
+    # put your 6 normal thread IDs here
+    1497297219328409673,
+    1497297722947010591,
+    1497298131971211304,
+    1497299464048873692,
+    1497300316910260314,
+    1497301044873396374,
+}
+
+# 🔴 SPECIAL (your 6 rare threads)
 SPECIAL_THREAD_IDS = {
     1498027467280089261,
     1498070775452925952,
@@ -84,27 +96,22 @@ async def send_message_with_files(message, target_channel):
         await target_channel.send(content=content or "(No content)")
 
 
-# 🔥 FIXED: proper probability picker (NO FAKE DECK)
-def pick_thread(threads):
+# 🔥 BUILD DECKS ONCE
+async def build_decks(source_channel):
+    threads = await get_all_threads(source_channel)
+
+    common = [t for t in threads if t.id in COMMON_THREAD_IDS]
     special = [t for t in threads if t.id in SPECIAL_THREAD_IDS]
-    normal = [t for t in threads if t.id not in SPECIAL_THREAD_IDS]
 
-    roll = random.random()
-
-    if roll < 0.10 and special:
-        return random.choice(special), True
-    else:
-        return random.choice(normal if normal else threads), False
+    return common, special
 
 
 @bot.command()
 async def roll(ctx, amount: int):
+    global special_count, normal_count
+
     if amount <= 0:
         await ctx.send("Give me a number above 0.")
-        return
-
-    if amount > 100:
-        await ctx.send("Max 100 rolls.")
         return
 
     source_channel = bot.get_channel(SOURCE_CHANNEL_ID)
@@ -114,32 +121,40 @@ async def roll(ctx, amount: int):
         await ctx.send("Channel not found.")
         return
 
-    threads = await get_all_threads(source_channel)
+    common_deck, special_deck = await build_decks(source_channel)
 
-    if not threads:
+    if not common_deck and not special_deck:
         await ctx.send("No threads found.")
         return
-
-    global special_count, normal_count
 
     used = set()
     sent = 0
     attempts = 0
-    max_attempts = amount * 10  # safety buffer
+    max_attempts = amount * 10
 
     while sent < amount and attempts < max_attempts:
         attempts += 1
 
-        chosen, is_special = pick_thread(threads)
+        # 🎯 10% chance SPECIAL deck
+        if special_deck and random.random() < 0.10:
+            pool = special_deck
+            is_special = True
+        else:
+            pool = common_deck if common_deck else special_deck
+            is_special = False
 
-        # 🚫 no repeats per roll
+        if not pool:
+            continue
+
+        chosen = random.choice(pool)
+
         if chosen.id in used:
             continue
 
         msg = await get_thread_starter_message(chosen)
 
         if not msg:
-            continue  # do NOT consume slot
+            continue
 
         used.add(chosen.id)
 
