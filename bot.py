@@ -15,9 +15,9 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 SOURCE_CHANNEL_ID = 1497296815559544862
 TARGET_CHANNEL_ID = 1499835814832504893
 
-# 🔵 DEFINE YOUR THREAD GROUPS HERE (REQUIRED)
+# 🔵 COMMON THREADS (YOU MUST DEFINE THESE)
 COMMON_THREAD_IDS = {
-        1497297219328409673,
+    1497297219328409673,
     1497297722947010591,
     1497298131971211304,
     1497299464048873692,
@@ -25,6 +25,7 @@ COMMON_THREAD_IDS = {
     1497301044873396374
 }
 
+# 🔴 SPECIAL THREADS
 SPECIAL_THREAD_IDS = {
     1498027467280089261,
     1498070775452925952,
@@ -44,7 +45,7 @@ async def on_ready():
 
 
 # ─────────────────────────────
-# THREAD FETCH
+# THREAD + MESSAGE LOADING
 # ─────────────────────────────
 
 async def get_all_threads(channel):
@@ -57,7 +58,43 @@ async def get_all_threads(channel):
     return threads
 
 
-def extract_message_content(message):
+async def collect_messages(channel):
+    """
+    Builds TWO pools:
+    - common messages
+    - special messages
+    """
+
+    threads = await get_all_threads(channel)
+
+    common_msgs = []
+    special_msgs = []
+
+    for thread in threads:
+
+        # ignore unrelated threads completely
+        if thread.id not in COMMON_THREAD_IDS and thread.id not in SPECIAL_THREAD_IDS:
+            continue
+
+        is_special = thread.id in SPECIAL_THREAD_IDS
+
+        async for msg in thread.history(limit=100):
+            if msg.author.bot:
+                continue
+
+            if is_special:
+                special_msgs.append(msg)
+            else:
+                common_msgs.append(msg)
+
+    return common_msgs, special_msgs
+
+
+# ─────────────────────────────
+# MESSAGE HANDLING
+# ─────────────────────────────
+
+def extract_text(message):
     parts = []
 
     if message.content:
@@ -73,17 +110,8 @@ def extract_message_content(message):
     return "\n".join(parts).strip()
 
 
-async def get_first_message(thread):
-    try:
-        return await thread.fetch_message(thread.id)
-    except:
-        async for msg in thread.history(limit=1, oldest_first=True):
-            return msg
-    return None
-
-
 async def send_message(message, channel):
-    content = extract_message_content(message)
+    content = extract_text(message)
 
     files = []
     for att in message.attachments:
@@ -99,15 +127,8 @@ async def send_message(message, channel):
 
 
 # ─────────────────────────────
-# CORE PICK LOGIC (CLEAN)
+# MAIN ROLL LOGIC
 # ─────────────────────────────
-
-def pick_from_pool(pool, used):
-    available = [t for t in pool if t.id not in used]
-    if not available:
-        return None
-    return random.choice(available)
-
 
 @bot.command()
 async def roll(ctx, amount: int):
@@ -117,6 +138,10 @@ async def roll(ctx, amount: int):
         await ctx.send("Give me a number above 0.")
         return
 
+    if amount > 100:
+        await ctx.send("Max 100 rolls.")
+        return
+
     source = bot.get_channel(SOURCE_CHANNEL_ID)
     target = bot.get_channel(TARGET_CHANNEL_ID)
 
@@ -124,45 +149,42 @@ async def roll(ctx, amount: int):
         await ctx.send("Channel not found.")
         return
 
-    threads = await get_all_threads(source)
+    common_msgs, special_msgs = await collect_messages(source)
 
-    common = [t for t in threads if t.id in COMMON_THREAD_IDS]
-    special = [t for t in threads if t.id in SPECIAL_THREAD_IDS]
-
-    if not common and not special:
-        await ctx.send("No threads configured.")
+    if not common_msgs and not special_msgs:
+        await ctx.send("No messages found.")
         return
+
+    random.shuffle(common_msgs)
+    random.shuffle(special_msgs)
 
     used = set()
     sent = 0
+    attempts = 0
+    max_attempts = amount * 10
 
-    while sent < amount:
+    while sent < amount and attempts < max_attempts:
+        attempts += 1
 
-        # 🎯 decide pool ONCE per pick
-        if special and random.random() < 0.10:
-            pool = special
+        # 🎯 10% special chance
+        use_special = special_msgs and random.random() < 0.10
+
+        if use_special:
+            pool = special_msgs
             is_special = True
         else:
-            pool = common if common else special
+            pool = common_msgs if common_msgs else special_msgs
             is_special = False
 
-        chosen = pick_from_pool(pool, used)
-
-        if not chosen:
-            # fallback: try opposite pool
-            pool = common if pool == special else special
-            chosen = pick_from_pool(pool, used)
-
-        if not chosen:
-            break  # nothing left
-
-        msg = await get_first_message(chosen)
-
-        if not msg:
-            used.add(chosen.id)
+        if not pool:
             continue
 
-        used.add(chosen.id)
+        msg = random.choice(pool)
+
+        if msg.id in used:
+            continue
+
+        used.add(msg.id)
 
         await send_message(msg, target)
 
