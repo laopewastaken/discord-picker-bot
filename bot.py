@@ -15,18 +15,16 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 SOURCE_CHANNEL_ID = 1497296815559544862
 TARGET_CHANNEL_ID = 1499835814832504893
 
-# 🔵 COMMON (your 6 normal threads)
+# 🔵 DEFINE YOUR THREAD GROUPS HERE (REQUIRED)
 COMMON_THREAD_IDS = {
-    # put your 6 normal thread IDs here
-    1497297219328409673,
+        1497297219328409673,
     1497297722947010591,
     1497298131971211304,
     1497299464048873692,
     1497300316910260314,
-    1497301044873396374,
+    1497301044873396374
 }
 
-# 🔴 SPECIAL (your 6 rare threads)
 SPECIAL_THREAD_IDS = {
     1498027467280089261,
     1498070775452925952,
@@ -45,6 +43,10 @@ async def on_ready():
     print(f"Logged in as {bot.user}")
 
 
+# ─────────────────────────────
+# THREAD FETCH
+# ─────────────────────────────
+
 async def get_all_threads(channel):
     threads = []
     threads.extend(channel.threads)
@@ -55,16 +57,7 @@ async def get_all_threads(channel):
     return threads
 
 
-async def get_thread_starter_message(thread):
-    try:
-        return await thread.fetch_message(thread.id)
-    except:
-        async for msg in thread.history(limit=1, oldest_first=True):
-            return msg
-    return None
-
-
-def extract_text(message):
+def extract_message_content(message):
     parts = []
 
     if message.content:
@@ -80,30 +73,40 @@ def extract_text(message):
     return "\n".join(parts).strip()
 
 
-async def send_message_with_files(message, target_channel):
-    content = extract_text(message)
+async def get_first_message(thread):
+    try:
+        return await thread.fetch_message(thread.id)
+    except:
+        async for msg in thread.history(limit=1, oldest_first=True):
+            return msg
+    return None
+
+
+async def send_message(message, channel):
+    content = extract_message_content(message)
 
     files = []
-    for attachment in message.attachments:
+    for att in message.attachments:
         try:
-            files.append(await attachment.to_file())
+            files.append(await att.to_file())
         except:
             pass
 
     if files:
-        await target_channel.send(content=content or None, files=files)
+        await channel.send(content=content or None, files=files)
     else:
-        await target_channel.send(content=content or "(No content)")
+        await channel.send(content=content or "(No content)")
 
 
-# 🔥 BUILD DECKS ONCE
-async def build_decks(source_channel):
-    threads = await get_all_threads(source_channel)
+# ─────────────────────────────
+# CORE PICK LOGIC (CLEAN)
+# ─────────────────────────────
 
-    common = [t for t in threads if t.id in COMMON_THREAD_IDS]
-    special = [t for t in threads if t.id in SPECIAL_THREAD_IDS]
-
-    return common, special
+def pick_from_pool(pool, used):
+    available = [t for t in pool if t.id not in used]
+    if not available:
+        return None
+    return random.choice(available)
 
 
 @bot.command()
@@ -114,51 +117,54 @@ async def roll(ctx, amount: int):
         await ctx.send("Give me a number above 0.")
         return
 
-    source_channel = bot.get_channel(SOURCE_CHANNEL_ID)
-    target_channel = bot.get_channel(TARGET_CHANNEL_ID)
+    source = bot.get_channel(SOURCE_CHANNEL_ID)
+    target = bot.get_channel(TARGET_CHANNEL_ID)
 
-    if not source_channel or not target_channel:
+    if not source or not target:
         await ctx.send("Channel not found.")
         return
 
-    common_deck, special_deck = await build_decks(source_channel)
+    threads = await get_all_threads(source)
 
-    if not common_deck and not special_deck:
-        await ctx.send("No threads found.")
+    common = [t for t in threads if t.id in COMMON_THREAD_IDS]
+    special = [t for t in threads if t.id in SPECIAL_THREAD_IDS]
+
+    if not common and not special:
+        await ctx.send("No threads configured.")
         return
 
     used = set()
     sent = 0
-    attempts = 0
-    max_attempts = amount * 10
 
-    while sent < amount and attempts < max_attempts:
-        attempts += 1
+    while sent < amount:
 
-        # 🎯 10% chance SPECIAL deck
-        if special_deck and random.random() < 0.10:
-            pool = special_deck
+        # 🎯 decide pool ONCE per pick
+        if special and random.random() < 0.10:
+            pool = special
             is_special = True
         else:
-            pool = common_deck if common_deck else special_deck
+            pool = common if common else special
             is_special = False
 
-        if not pool:
-            continue
+        chosen = pick_from_pool(pool, used)
 
-        chosen = random.choice(pool)
+        if not chosen:
+            # fallback: try opposite pool
+            pool = common if pool == special else special
+            chosen = pick_from_pool(pool, used)
 
-        if chosen.id in used:
-            continue
+        if not chosen:
+            break  # nothing left
 
-        msg = await get_thread_starter_message(chosen)
+        msg = await get_first_message(chosen)
 
         if not msg:
+            used.add(chosen.id)
             continue
 
         used.add(chosen.id)
 
-        await send_message_with_files(msg, target_channel)
+        await send_message(msg, target)
 
         if is_special:
             special_count += 1
@@ -167,6 +173,10 @@ async def roll(ctx, amount: int):
 
         sent += 1
 
+
+# ─────────────────────────────
+# STATS
+# ─────────────────────────────
 
 @bot.command()
 async def stats(ctx):
