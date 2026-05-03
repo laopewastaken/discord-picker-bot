@@ -134,8 +134,6 @@ async def send_message(message, channel):
 @bot.command()
 async def roll(ctx, amount: int):
     
-    async def roll(ctx, amount: int):
-
     # 🚫 ADD THIS BLOCK
     if ctx.channel.id != ALLOWED_CHANNEL_ID:
         return
