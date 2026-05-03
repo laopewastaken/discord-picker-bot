@@ -13,7 +13,8 @@ intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 SOURCE_CHANNEL_ID = 1497296815559544862
-TARGET_CHANNEL_ID = 1498464307195936858
+TARGET_CHANNEL_ID = 1499835814832504893
+ALLOWED_CHANNEL_ID = 1498464307195936858  # channel where !roll is allowed
 
 # 🔵 COMMON THREADS (YOU MUST DEFINE THESE)
 COMMON_THREAD_IDS = {
@@ -132,6 +133,13 @@ async def send_message(message, channel):
 
 @bot.command()
 async def roll(ctx, amount: int):
+    
+    async def roll(ctx, amount: int):
+
+    # 🚫 ADD THIS BLOCK
+    if ctx.channel.id != ALLOWED_CHANNEL_ID:
+        return
+    
     global special_count, normal_count
 
     if amount <= 0:
