@@ -12,8 +12,8 @@ intents.message_content = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-SOURCE_CHANNEL_ID = 1497296815559544862
-TARGET_CHANNEL_ID = 1499835814832504893
+source = await bot.fetch_channel(1497296815559544862)
+target = await bot.fetch_channel(1499835814832504893)
 ALLOWED_CHANNEL_ID = 1498464307195936858  # channel where !roll is allowed
 
 # 🔵 COMMON THREADS (YOU MUST DEFINE THESE)
