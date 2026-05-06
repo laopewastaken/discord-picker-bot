@@ -175,28 +175,31 @@ async def send_message(message, channel):
 
 def pick_tier():
 
-    # 1%
-    if random.random() < 0.01:
-        return "F"
+    r = random.random()
 
-    # 5%
-    if random.random() < 0.05:
-        return "E"
+    # 0.1%
+    if r < 0.001:
+        return "F"  # Legendary
+
+    # 0.9%
+    elif r < 0.010:
+        return "E"  # Epic
+
+    # 4%
+    elif r < 0.050:
+        return "D"  # Super Rare
 
     # 10%
-    if random.random() < 0.10:
-        return "D"
+    elif r < 0.150:
+        return "C"  # Rare
 
-    # 20%
-    if random.random() < 0.20:
-        return "C"
+    # 35%
+    elif r < 0.500:
+        return "B"  # Uncommon
 
-    # 80%
-    if random.random() < 0.80:
-        return "B"
-
-    # fallback
-    return "A"
+    # 50%
+    else:
+        return "A"  # Common
 
 
 # ─────────────────────────────
