@@ -185,19 +185,19 @@ def pick_tier():
     elif r < 0.010:
         return "E"  # Epic
 
-    # 4%
-    elif r < 0.050:
+    # 3%
+    elif r < 0.040:
         return "D"  # Super Rare
 
-    # 10%
-    elif r < 0.150:
+    # 7%
+    elif r < 0.110:
         return "C"  # Rare
 
     # 35%
-    elif r < 0.500:
+    elif r < 0.460:
         return "B"  # Uncommon
 
-    # 50%
+    # 55%
     else:
         return "A"  # Common
 
