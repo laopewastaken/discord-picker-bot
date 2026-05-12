@@ -58,7 +58,7 @@ EPIC_THREAD_IDS = {
     1501686335906254869 
 }
 LEGENDARY_THREAD_IDS = {
-1501702000151236809 
+    1501702000151236809 
 }
 
 
@@ -96,9 +96,6 @@ async def get_all_threads(channel):
 
 
 async def collect_messages(channel):
-    """
-    Build tiered pools
-    """
 
     threads = await get_all_threads(channel)
 
@@ -177,27 +174,16 @@ def pick_tier():
 
     r = random.random()
 
-    # 0.1%
     if r < 0.001:
         return "F"  # Legendary
-
-    # 0.9%
     elif r < 0.010:
         return "E"  # Epic
-
-    # 3%
     elif r < 0.040:
         return "D"  # Super Rare
-
-    # 7%
     elif r < 0.110:
         return "C"  # Rare
-
-    # 35%
     elif r < 0.460:
         return "B"  # Uncommon
-
-    # 55%
     else:
         return "A"  # Common
 
@@ -231,13 +217,15 @@ async def roll(ctx, amount: int):
     attempts = 0
     max_attempts = amount * 15
 
+    # ───────── NEW: recap storage ─────────
+    recap_texts = []
+
     while sent < amount and attempts < max_attempts:
         attempts += 1
 
         tier = pick_tier()
         pool = pools.get(tier, [])
 
-        # fallback system (prevents empty tiers breaking rolls)
         if not pool:
             pool = pools["A"]
 
@@ -253,8 +241,20 @@ async def roll(ctx, amount: int):
 
         await send_message(msg, target)
 
+        text = extract_text(msg)
+        if text:
+            recap_texts.append(text)
+
         stats_counter[tier] += 1
         sent += 1
+
+    # ───────── FINAL RECAP MESSAGE ─────────
+    if recap_texts:
+        formatted = "; ".join(f"`{t}`" for t in recap_texts)
+
+        await target.send(
+            f"{ctx.author.mention}, your last {len(recap_texts)} rolls:\n{formatted}"
+        )
 
 
 # ─────────────────────────────
