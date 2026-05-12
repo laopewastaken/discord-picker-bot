@@ -174,9 +174,9 @@ def pick_tier():
 
     r = random.random()
 
-    if r < 1.001:
+    if r < 0.001:
         return "F"  # Legendary
-    elif r < 1.010:
+    elif r < 0.010:
         return "E"  # Epic
     elif r < 0.040:
         return "D"  # Super Rare
