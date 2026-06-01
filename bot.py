@@ -1,7 +1,15 @@
 import discord
+
 import random
+
 from discord.ext import commands
+
 import os
+
+import asyncio
+
+from datetime import datetime, timedelta
+
 
 TOKEN = os.getenv("TOKEN")
 
@@ -75,6 +83,16 @@ stats_counter = {
     "F": 0
 }
 
+# ─────────────────────────────
+# CACHE
+# ─────────────────────────────
+
+thread_cache = {
+    "pools": None,
+    "last_updated": None,
+    "cache_duration": 3600  # 1 hour in seconds
+}
+
 
 @bot.event
 async def on_ready():
@@ -96,7 +114,15 @@ async def get_all_threads(channel):
 
 
 async def collect_messages(channel):
+    # Check if cache is still valid
+    now = datetime.now()
+    if (thread_cache["pools"] is not None and 
+        thread_cache["last_updated"] is not None and
+        (now - thread_cache["last_updated"]).total_seconds() < thread_cache["cache_duration"]):
+        print("Using cached thread data")
+        return thread_cache["pools"]
 
+    print("Fetching fresh thread data from Discord")
     threads = await get_all_threads(channel)
 
     pools = {
@@ -126,6 +152,10 @@ async def collect_messages(channel):
                 pools["E"].append(msg)
             elif thread.id in LEGENDARY_THREAD_IDS:
                 pools["F"].append(msg)
+
+    # Update cache
+    thread_cache["pools"] = pools
+    thread_cache["last_updated"] = now
 
     return pools
 
@@ -299,4 +329,14 @@ async def resetstats(ctx):
     await ctx.send("📊 Stats reset.")
 
 
+@bot.command()
+async def clearcache(ctx):
+    """Manually clear the thread cache"""
+    global thread_cache
+    thread_cache["pools"] = None
+    thread_cache["last_updated"] = None
+    await ctx.send("🗑️ Thread cache cleared. Fresh data will be fetched on next roll.")
+
+
 bot.run(TOKEN)
+
