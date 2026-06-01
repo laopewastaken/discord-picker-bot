@@ -174,27 +174,27 @@ def pick_tier():
 
     r = random.random()
 
-    # 2%
-    if r < 0.020:
+    # 3%
+    if r < 0.030:
         return "F"  # Legendary
 
     # 0.9%
-    elif r < 0.029:
+    elif r < 0.039:
         return "E"  # Epic
 
-    # 7%
-    elif r < 0.099:
+    # 10%
+    elif r < 0.139:
         return "D"  # Super Rare
 
     # 10%
-    elif r < 0.199:
+    elif r < 0.239:
         return "C"  # Rare
 
     # 35%
-    elif r < 0.549:
+    elif r < 0.589:
         return "B"  # Uncommon
 
-    # 45.1%
+    # 41.1%
     else:
         return "A"  # Common
 
