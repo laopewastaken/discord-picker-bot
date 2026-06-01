@@ -2,6 +2,7 @@ import discord
 import random
 from discord.ext import commands
 import os
+import time
 
 TOKEN = os.getenv("TOKEN")
 
@@ -11,6 +12,11 @@ intents.messages = True
 intents.message_content = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
+
+CACHE_DURATION = 3600  # 1 hour
+
+cached_pools = None
+cache_timestamp = 0
 
 SOURCE_CHANNEL_ID = 1497296815559544862
 TARGET_CHANNEL_ID = 1498464307195936858
@@ -96,6 +102,13 @@ async def get_all_threads(channel):
 
 
 async def collect_messages(channel):
+    global cached_pools, cache_timestamp
+
+    now = time.time()
+
+    # Use cache if still valid
+    if cached_pools and (now - cache_timestamp) < CACHE_DURATION:
+        return cached_pools
 
     threads = await get_all_threads(channel)
 
@@ -116,19 +129,28 @@ async def collect_messages(channel):
 
             if thread.id in COMMON_THREAD_IDS:
                 pools["A"].append(msg)
+
             elif thread.id in UNCOMMON_THREAD_IDS:
                 pools["B"].append(msg)
+
             elif thread.id in RARE_THREAD_IDS:
                 pools["C"].append(msg)
+
             elif thread.id in SUPER_RARE_THREAD_IDS:
                 pools["D"].append(msg)
+
             elif thread.id in EPIC_THREAD_IDS:
                 pools["E"].append(msg)
+
             elif thread.id in LEGENDARY_THREAD_IDS:
                 pools["F"].append(msg)
 
-    return pools
+    cached_pools = pools
+    cache_timestamp = now
 
+    print("Pools rebuilt from Discord.")
+
+    return pools
 
 # ─────────────────────────────
 # MESSAGE HANDLING
@@ -298,5 +320,12 @@ async def resetstats(ctx):
     stats_counter = {k: 0 for k in stats_counter}
     await ctx.send("📊 Stats reset.")
 
+@bot.command()
+async def clearcache(ctx):
+    global cached_pools, cache_timestamp
 
+    cached_pools = None
+    cache_timestamp = 0
+
+    await ctx.send("🔄 Cache cleared.")
 bot.run(TOKEN)
